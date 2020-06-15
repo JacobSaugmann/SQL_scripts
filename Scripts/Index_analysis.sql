@@ -103,7 +103,7 @@ FROM sys.indexes i
                         FOR XML PATH('')
                         ), 1, 1, '')
             ) DS2([IncludedColumnsNames])
-WHERE i.type IN (1,2) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA' AND is_disabled = 0
+WHERE i.type IN (1,2) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA'
 
 --Missing index on tables with existing index
 
@@ -319,12 +319,12 @@ SELECT i.object_id,
 INTO #useless_space_consumption
 FROM sys.indexes i
     INNER JOIN drop_indexes di
-        ON di.name = i.name
+        ON di.name = i.name COLLATE DATABASE_DEFAULT
 OUTER APPLY(
 SELECT COUNT(sz.used_page_count) AS page_count,
 SUM(sz.[used_page_count]) * 8/1024 AS mb_pages
 FROM sys.dm_db_partition_stats AS sz
-INNER JOIN sys.indexes AS ix ON sz.[object_id] = ix.[object_id] 
+INNER JOIN sys.indexes AS ix ON sz.[object_id] = ix.[object_id]  
 AND sz.[index_id] = ix.[index_id]
 INNER JOIN sys.tables tn ON tn.OBJECT_ID = ix.object_id
 WHERE i.name = ix.[name] AND i.object_id = ix.object_id

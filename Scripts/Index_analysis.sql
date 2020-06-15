@@ -103,7 +103,7 @@ FROM sys.indexes i
                         FOR XML PATH('')
                         ), 1, 1, '')
             ) DS2([IncludedColumnsNames])
-WHERE i.type IN (1,2) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA'
+WHERE i.type IN (1,2) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA' AND is_disabled = 0
 
 --Missing index on tables with existing index
 
@@ -355,4 +355,3 @@ IF OBJECT_ID('tempdb..#Density_Selectability','U') IS NOT NULL
 IF OBJECT_ID('tempdb..#useless_space_consumption','U') IS NOT NULL
     DROP TABLE #useless_space_consumption
 END
-

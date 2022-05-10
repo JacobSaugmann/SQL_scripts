@@ -335,7 +335,12 @@ GROUP BY tn.[name], ix.[name]
 SELECT 'At least '+ CAST(SUM(u.mb_pages) AS VARCHAR(50)) + ' MB of waisted space' AS comment
 FROM #useless_space_consumption u
 
-SELECT * 
+SELECT OBJECT_NAME(object_id) as object_name,
+        object_id,
+		index_id,
+		record_count,
+		page_count,
+		mb_pages
 FROM #useless_space_consumption
 
 

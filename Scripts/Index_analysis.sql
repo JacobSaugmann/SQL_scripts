@@ -342,7 +342,7 @@ SELECT OBJECT_NAME(object_id) as object_name,
 		page_count,
 		mb_pages
 FROM #useless_space_consumption
-
+ORDER BY object_name
 
 IF @drop_tmp_table = 1
 BEGIN

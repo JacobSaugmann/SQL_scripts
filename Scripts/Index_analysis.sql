@@ -103,7 +103,7 @@ FROM sys.indexes i
                         FOR XML PATH('')
                         ), 1, 1, '')
             ) DS2([IncludedColumnsNames])
-WHERE i.type IN (1,2) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA' AND i.is_disabled = 0
+WHERE i.type IN (1,2,5) AND ids.database_id = @db_id AND alloc_unit_type_desc = 'IN_ROW_DATA' AND i.is_disabled = 0
 
 --Missing index on tables with existing index
 
@@ -129,7 +129,7 @@ AS
        m.meta_data_age
 FROM #MissingIndexes m 
 UNION ALL
-SELECT e.table_name,
+SELECT DISTINCT e.table_name,
        e.table_type_desc,
        e.name,
        e.type_desc index_type_desc,

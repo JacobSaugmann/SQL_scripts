@@ -9,6 +9,7 @@ DECLARE @min_advantage TINYINT = 80
 DECLARE @GetSelectability BIT = 0
 DECLARE @drop_tmp_table BIT = 0
 DECLARE @meta_age INT = -1
+DECLARE @only_index_analysis BIT = 1
 
 IF OBJECT_ID('tempdb..#MissingIndexes','U') IS NOT NULL
     DROP TABLE #MissingIndexes
@@ -151,6 +152,10 @@ FROM #ExistingIndexes e
 SELECT *
 FROM index_info
 ORDER BY table_name, table_type_desc COLLATE DATABASE_DEFAULT
+
+IF @only_index_analysis = 1
+	RETURN;
+
 
 IF @meta_age < 100
 BEGIN

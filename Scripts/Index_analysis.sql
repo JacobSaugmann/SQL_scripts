@@ -194,6 +194,9 @@ AS
     			ON es.index_columns_names = e.index_columns_names
     				AND es.table_name = e.table_name
     				AND es.name <> e.name
+     WHERE (
+		@limit_to_tablename IS NULL
+	     OR e.table_name LIKE '%'+@limit_to_tablename+'%') 
 )
 SELECT DISTINCT CASE WHEN oi.row_no > 1
 		AND index_state = 'Overlapping'        THEN '[WARNING] overlapping index'

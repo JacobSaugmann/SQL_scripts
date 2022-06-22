@@ -1,5 +1,5 @@
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
-
+SET NOCOUNT ON;
 --USE [DatabaseName]
 --GO
 
@@ -173,9 +173,7 @@ ORDER BY table_name , table_type_desc COLLATE DATABASE_DEFAULT
 
 IF @only_index_analysis = 1
 BEGIN
-	--DROP TABLE IF EXISTS #ExistingIndexes
-	DROP TABLE IF EXISTS #MissingIndexes
-	RETURN;
+	GOTO CLEANUP
 END
 
 /* Get overlapping indexes */
@@ -194,9 +192,9 @@ AS
     			ON es.index_columns_names = e.index_columns_names
     				AND es.table_name = e.table_name
     				AND es.name <> e.name
-     WHERE (
-		@limit_to_tablename IS NULL
-	     OR e.table_name LIKE '%'+@limit_to_tablename+'%') 
+    WHERE (
+    		@limit_to_tablename IS NULL
+    		OR e.table_name LIKE '%'+@limit_to_tablename+'%')
 )
 SELECT DISTINCT CASE WHEN oi.row_no > 1
 		AND index_state = 'Overlapping'        THEN '[WARNING] overlapping index'
@@ -424,19 +422,25 @@ BEGIN
     ORDER BY object_name
 
 END
-IF @drop_tmp_table = 1
+GOTO CLEANUP
+
+
+CLEANUP:
 BEGIN
+IF @drop_tmp_table = 1
+	BEGIN
 
-	IF OBJECT_ID('tempdb..#MissingIndexes','U') IS NOT NULL
-		DROP TABLE #MissingIndexes
+		IF OBJECT_ID('tempdb..#MissingIndexes','U') IS NOT NULL
+			DROP TABLE #MissingIndexes
 
-	IF OBJECT_ID('tempdb..#ExistingIndexes','U') IS NOT NULL
-		DROP TABLE #ExistingIndexes
+		IF OBJECT_ID('tempdb..#ExistingIndexes','U') IS NOT NULL
+			DROP TABLE #ExistingIndexes
 
-	IF OBJECT_ID('tempdb..#Density_Selectability','U') IS NOT NULL
-		DROP TABLE #Density_Selectability
+		IF OBJECT_ID('tempdb..#Density_Selectability','U') IS NOT NULL
+			DROP TABLE #Density_Selectability
 
 
-	IF OBJECT_ID('tempdb..#useless_space_consumption','U') IS NOT NULL
-		DROP TABLE #useless_space_consumption
+		IF OBJECT_ID('tempdb..#useless_space_consumption','U') IS NOT NULL
+			DROP TABLE #useless_space_consumption
+	END
 END

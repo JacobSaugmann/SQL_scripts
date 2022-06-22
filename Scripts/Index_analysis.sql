@@ -219,12 +219,13 @@ BEGIN
 END
 
 /* Create Drop index statement */
-SELECT CONCAT('DROP INDEX ', QUOTENAME(e.name), ' ON ', e.table_name) AS drop_statement,
-	   e.user_lookups,
-	   e.user_scans,
-	   e.user_seeks,
-	   e.user_updates,
-	   e.meta_data_age
+SELECT  CONCAT('DROP INDEX ', QUOTENAME(e.name), ' ON ', e.table_name) AS drop_statement,
+        CONCAT('ALTER ', QUOTENAME(e.name) ,' ON ',e.table_name, ' DISABLE;') AS disable_statement,
+        e.user_lookups,
+	e.user_scans,
+	e.user_seeks,
+	e.user_updates,
+	e.meta_data_age
 FROM #ExistingIndexes e
 WHERE (((IIF(e.user_updates=0,1.0,e.user_updates*1.0) - (e.user_scans + e.user_seeks+ e.user_lookups))/IIF(e.user_updates=0,1,e.user_updates)) * 100 > 95 )
 	--Don't show Unique constraint index and Promary key index

@@ -1,10 +1,3 @@
-/* 
-	Brent Ozar Script for write latency
-	Average read stalls (latency) 
-	At Microsoft SQL Customer Advisory Team – in point #4 in their Top 10 OLTP Issues, 
-	they suggest that reads over 15ms are a bottleneck and that log file writes should be 1ms or less.  
-	Keep in mind that this team usually deals with high-performance environments, though – not every SQL Server can afford to be quite this fast.
-*/
 	SELECT  DB_NAME(a.database_id) AS [Database Name] ,
         b.name + N' [' + b.type_desc COLLATE SQL_Latin1_General_CP1_CI_AS + N']' AS [Logical File Name] ,
         UPPER(SUBSTRING(b.physical_name, 1, 2)) AS [Drive] ,

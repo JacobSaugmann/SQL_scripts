@@ -26,7 +26,8 @@ FROM sys.dm_tran_locks AS TL
 	LEFT OUTER JOIN sys.partitions AS P       
 			ON P.hobt_id = TL.resource_associated_entity_id
 	LEFT OUTER JOIN sys.allocation_units AS AU
-			ON AU.allocation_unit_id = TL.resource_associated_entity_id;
+			ON AU.allocation_unit_id = TL.resource_associated_entity_id
+WHERE WT.blocking_session_id IS NOT NULL;;
 
 SELECT *
 FROM #Blocking

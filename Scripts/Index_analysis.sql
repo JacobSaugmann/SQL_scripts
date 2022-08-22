@@ -138,10 +138,9 @@ AS
     	   m.user_scans,
     	   m.user_seeks,
     	   NULL user_updates,
-    	   m.avg_user_impact,
-    	   m.avg_total_user_cost,
-    	   (m.avg_total_user_cost * (m.avg_user_impact /100.0) * m.user_seeks) / meta_data_age create_index_adv,
-    	-- ((m.user_scans + m.user_seeks) * m.avg_total_user_cost * m.avg_user_impact) / meta_data_age  create_index_adv_pr_day,
+    	   CAST(m.avg_user_impact AS DECIMAL(18,2)) AS avg_user_impact,
+    	   CAST(m.avg_total_user_cost AS DECIMAL(18,2))  AS avg_total_user_cost,
+    	   CAST((m.avg_total_user_cost * (m.avg_user_impact /100.0) * m.user_seeks) / meta_data_age AS DECIMAL(18,2)) create_index_adv,
     	   m.meta_data_age
     FROM #MissingIndexes m
 	UNION ALL

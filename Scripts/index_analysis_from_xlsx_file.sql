@@ -98,9 +98,9 @@ AS
     	   inequality_columns,
     	   CAST (user_scans AS BIGINT) AS user_scans,
     	   CAST(user_seeks AS BIGINT) AS user_seeks,
-    	   CAST(avg_user_impact AS DECIMAL(8,2)) AS avg_user_impact,
-    	   CAST(avg_total_user_cost AS DECIMAL(8,2)) AS avg_total_user_cost,
-    	   CAST(create_index_adv AS DECIMAL(8,2)) AS create_index_adv,
+    	   CAST(avg_user_impact AS DECIMAL(18,2)) AS avg_user_impact,
+    	   CAST(avg_total_user_cost AS DECIMAL(18,2)) AS avg_total_user_cost,
+    	   CAST(create_index_adv AS DECIMAL(18,2)) AS create_index_adv,
     	   meta_data_age
     FROM #index
     WHERE table_type_desc = 'Missing_Index'

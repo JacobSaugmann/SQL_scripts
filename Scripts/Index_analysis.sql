@@ -34,8 +34,8 @@ BEGIN
 	RAISERROR (@msg, 0, 1) WITH NOWAIT
 END
 
-SELECT md.statement table_name,
-	   'Missing_Index' table_type_desc,
+SELECT md.statement AS table_name,
+	   'Missing_Index' AS table_type_desc,
 	   md.equality_columns,
 	   md.inequality_columns,
 	   md.included_columns,
@@ -45,7 +45,8 @@ SELECT md.statement table_name,
 	   mgs.user_seeks,
 	   mgs.last_user_scan,
 	   mgs.last_user_seek,
-	   @meta_age meta_data_age
+	   @meta_age meta_data_age,
+	   CONCAT('CREATE NONCLUSTERED INDEX IDX_',REPLACE(REPLACE(REPLACE(SUBSTRING(md.statement, CHARINDEX('.', md.statement)+1, LEN(md.statement)- LEN(CHARINDEX('.', md.statement))), '[',''), ']',''),'.','_'),'_',REPLACE(REPLACE(REPLACE(REPLACE(md.equality_columns, '.','_'),'[',''),']',''),', ',''),' ON ',md.statement, ' (',md.equality_columns ,')', IIF(md.included_columns IS NOT NULL,' INCLUDE(' +md.included_columns+ ')', ''), ' WITH (DATA_COMPRESSION=PAGE);'   ) AS create_ix_stmt
 	INTO #MissingIndexes
 FROM sys.dm_db_missing_index_details md               
 	INNER JOIN sys.dm_db_missing_index_groups mg      
@@ -127,21 +128,22 @@ AS
 (
 	SELECT m.table_name COLLATE DATABASE_DEFAULT table_name,
     	   m.table_type_desc COLLATE DATABASE_DEFAULT table_type_desc,
-    	   NULL index_name,
-    	   NULL index_type_desc,
-    	   NULL is_unique,
-    	   NULL is_primary_key,
-    	   NULL has_filter,
+    	   NULL AS index_name,
+    	   NULL AS index_type_desc,
+    	   NULL AS is_unique,
+    	   NULL AS is_primary_key,
+    	   NULL AS has_filter,
     	   m.equality_columns COLLATE DATABASE_DEFAULT index_columns_names,
     	   m.included_columns COLLATE DATABASE_DEFAULT included_columns,
     	   m.inequality_columns COLLATE DATABASE_DEFAULT inequality_columns,
     	   m.user_scans,
     	   m.user_seeks,
-    	   NULL user_updates,
+    	   NULL AS user_updates,
     	   CAST(m.avg_user_impact AS DECIMAL(18,2)) AS avg_user_impact,
     	   CAST(m.avg_total_user_cost AS DECIMAL(18,2))  AS avg_total_user_cost,
     	   CAST((m.avg_total_user_cost * (m.avg_user_impact /100.0) * m.user_seeks) / meta_data_age AS DECIMAL(18,2)) create_index_adv,
-    	   m.meta_data_age
+    	   m.meta_data_age,
+		   m.create_ix_stmt AS create_index_statement
     FROM #MissingIndexes m
 	UNION ALL
 	SELECT DISTINCT e.table_name,
@@ -153,14 +155,15 @@ AS
     	            e.has_filter,
     	            e.index_columns_names,
     	            e.included_columns_names,
-    	            NULL inequality_columns,
+    	            NULL AS inequality_columns,
     	            e.user_scans,
     	            e.user_seeks,
     	            e.user_updates,
-    	            NULL avg_user_impact,
-    	            NULL avg_total_user_cost,
-    	            NULL create_index_adv_pr_day,
-    	            meta_data_age
+    	            NULL AS avg_user_impact,
+    	            NULL AS avg_total_user_cost,
+    	            NULL AS create_index_adv_pr_day,
+    	            meta_data_age,
+					NULL AS create_index_statement
     FROM #ExistingIndexes e
 )
 SELECT *

@@ -207,7 +207,7 @@ SELECT DISTINCT CASE WHEN oi.row_no > 1
 	            oi.index_name,
 	            oi.index_columns_names,
 	            oi.included_columns_names,
-	            CASE WHEN oi.row_no > 1 THEN CONCAT('ALTER ', QUOTENAME(oi.index_name) ,' ON ',oi.table_name, ' DISABLE;') END AS disable_stmt
+	            CASE WHEN oi.row_no > 1 THEN CONCAT('ALTER INDEX ', QUOTENAME(oi.index_name) ,' ON ',oi.table_name, ' DISABLE;') END AS disable_stmt
 FROM OVERLAPPING_INDEXES oi
 ORDER BY oi.table_name , oi.index_name
 

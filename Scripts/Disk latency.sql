@@ -1,3 +1,8 @@
+SELECT DATEDIFF(DAY,create_date, GETDATE()) AS Online_days 
+FROM sys.databases
+WHERE name = 'tempdb'
+GO
+
 SELECT LEFT(mf.physical_name, 100)
 	,ReadLatency = CASE 
 		WHEN num_of_reads = 0

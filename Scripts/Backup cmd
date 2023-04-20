@@ -1,0 +1,34 @@
+/* Get date part of string */
+
+DECLARE @DatabaseName VARCHAR(128) = '[AXDB]'
+DECLARE @BackupFileName VARCHAR(128) = CONCAT (
+		REPLACE(REPLACE(@DatabaseName, '[', ''),']',''),
+		'_'
+		,FORMAT(GETDATE(), 'yyyy_MM_dd_HHmmss')
+		)
+DECLARE @path NVARCHAR(4000)
+
+EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE'
+	,N'Software\Microsoft\MSSQLServer\MSSQLServer'
+	,N'BackupDirectory'
+	,@path OUTPUT
+	,'no_output'
+
+
+
+/* Build the command */
+DECLARE @cmd NVARCHAR(2000)
+
+SET @cmd = 'BACKUP DATABASE ' + @DatabaseName + ' 
+TO  DISK = N'''+@path+'\' + @backupFileName + '_1.bak'',
+	DISK = N'''+@path+'\' + @backupFileName + '_2.bak'',
+	DISK = N'''+@path+'\' + @backupFileName + '_3.bak'', 
+	DISK = N'''+@path+'\' + @backupFileName + '_4.bak'', 
+	DISK = N'''+@path+'\' + @backupFileName + '_5.bak'',
+	DISK = N'''+@path+'\' + @backupFileName + '_6.bak''  
+WITH  COPY_ONLY, NOFORMAT, NOINIT, SKIP, NOREWIND, NOUNLOAD,COMPRESSION,  STATS = 10'
+
+PRINT @cmd
+/* Run cmd */
+EXEC sp_executesql @cmd
+

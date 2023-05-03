@@ -1,0 +1,43 @@
+SELECT
+	bs.database_name,
+	db.recovery_model_desc,
+	bs.backup_start_date,
+	bs.backup_finish_date,
+	CASE bs.TYPE
+		 WHEN 'D'
+			 THEN 'Database'
+		 WHEN 'L'
+			 THEN 'Log'
+		 WHEN 'I'
+			 THEN 'Differential database'
+		 WHEN 'F'
+			 THEN 'File or filegroup'
+		 WHEN 'G'
+			 THEN 'Differential file'
+		 WHEN 'P'
+			 THEN 'Partial'
+		 WHEN 'Q'
+			 THEN 'Differential partial'
+	END AS backup_type,
+	ROUND(CAST(bs.backup_size AS FLOAT(25)) / 1024 / 1024 / 1024, 2) BackupSizeGB,
+	ROUND(CAST(bs.compressed_backup_size AS FLOAT(25)) / 1024 / 1024 / 1024, 2) CompressedBackupSizeGB, --if not available comment this line
+	CAST(bs.first_lsn AS VARCHAR(50)) AS first_lsn,
+	CAST(bs.last_lsn AS VARCHAR(50)) AS last_lsn,
+	bmf.physical_device_name,
+	bs.NAME AS backupset_name,
+	bs.description,
+	bs.server_name,
+	bs.machine_name,
+	bmf.device_type
+FROM msdb.dbo.backupset bs
+	 LEFT JOIN sys.databases db
+		 ON bs.database_name = db.NAME
+	 LEFT JOIN msdb.dbo.backupmediafamily bmf
+		 ON bmf.media_set_id = bs.media_set_id
+WHERE (CONVERT(DATETIME, bs.backup_start_date, 102) >= GETDATE() - 7)
+--and bs.type = 'D'
+--and bs.database_name = 'TransVault'
+--and bmf.device_type = 2 --7
+ORDER BY
+--bs.database_name,
+bs.backup_finish_date DESC

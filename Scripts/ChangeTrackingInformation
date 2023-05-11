@@ -1,0 +1,31 @@
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+GO
+
+SELECT
+	sct1.name AS CT_schema,
+	sot1.name AS CT_table,
+	ps1.row_count AS CT_rows,
+	ps1.reserved_page_count * 8. / 1024. AS CT_reserved_MB,
+	sct2.name AS tracked_schema,
+	sot2.name AS tracked_name,
+	ps2.row_count AS tracked_rows,
+	ps2.reserved_page_count * 8. / 1024. AS tracked_base_table_MB,
+	change_tracking_min_valid_version(sot2.object_id) AS min_valid_version
+FROM sys.internal_tables it
+	 JOIN sys.objects sot1
+		 ON it.object_id = sot1.object_id
+	 JOIN sys.schemas AS sct1
+		 ON sot1.schema_id = sct1.schema_id
+	 JOIN sys.dm_db_partition_stats ps1
+		 ON it.object_id = ps1.object_id
+			 AND ps1.index_id IN (0, 1)
+	 LEFT JOIN sys.objects sot2
+		 ON it.parent_object_id = sot2.object_id
+	 LEFT JOIN sys.schemas AS sct2
+		 ON sot2.schema_id = sct2.schema_id
+	 LEFT JOIN sys.dm_db_partition_stats ps2
+		 ON sot2.object_id = ps2.object_id
+			 AND ps2.index_id IN (0, 1)
+WHERE it.internal_type IN (209, 210)
+ORDER BY CT_reserved_MB DESC;
+GO

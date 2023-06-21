@@ -1,0 +1,50 @@
+DROP TABLEIF EXISTS #pmuser
+
+CREATE TABLE #pmuser (
+  sqltext VARCHAR(MAX)
+  ,session_id BIGINT
+  ,starttime DATETIME2
+  )
+
+DECLARE @runto DATETIME2 = DATEADD(second, 10, GETDATE())
+
+WHILE GETDATE() <= @runto
+BEGIN
+		;
+
+	WITH User_information
+	AS (
+		SELECT CAST(CONTEXT_INFO AS VARCHAR(MAX)) AS userinfo
+			,c.*
+		FROM sys.dm_exec_sessions AS c
+		WHERE c.session_id > 50
+		)
+		,SESSIONID
+	AS (
+		SELECT session_id
+		FROM User_information
+		WHERE userinfo LIKE '%pm_user%'
+		)
+	INSERT INTO #pmuser (
+		sqltext
+		,session_id
+		,starttime
+		)
+	SELECT t.TEXT
+		,s.session_id
+		,r.start_time
+	FROM sys.dm_exec_requests r
+	INNER JOIN SESSIONID s ON s.session_id = r.session_id
+	CROSS APPLY sys.dm_exec_sql_text(r.plan_handle) AS t
+	
+	EXCEPT
+	
+	SELECT sqltext
+		,session_id
+		,starttime
+	FROM #pmuser
+END
+
+SELECT *
+FROM #pmuser
+WHERE sqltext LIKE '%VENDTRANS%'

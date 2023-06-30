@@ -20,20 +20,20 @@ END
 
 
 SELECT
-	objtype AS [cachetype],
-	COUNT_BIG(*) AS [total plans],
-	SUM(CAST(size_in_bytes AS DECIMAL(18, 2))) / 1024 / 1024 AS [total mbs],
-	AVG(usecounts) AS [avg use count],
+	objtype AS cachetype,
+	COUNT_BIG(*) AS total_plans,
+	SUM(CAST(size_in_bytes AS DECIMAL(18, 2))) / 1024 / 1024 AS total_mbs,
+	AVG(usecounts) AS avg_use_count,
 	SUM(CAST((
 	CASE
 		 WHEN usecounts = 1 THEN size_in_bytes
 		 ELSE 0
 	END
-	) AS DECIMAL(18, 2))) / 1024 / 1024 AS [total mbs – use count 1],
+	) AS DECIMAL(18, 2))) / 1024 / 1024 AS total_mbs_use_count_1,
 	SUM(CASE
 		 WHEN usecounts = 1 THEN 1
 		 ELSE 0
-	END) AS [total plans – use count 1]
+	END) AS total_plans_use_count_1
 INTO #cache
 FROM sys.dm_exec_cached_plans
 GROUP BY objtype
@@ -41,14 +41,14 @@ GROUP BY objtype
 DECLARE @cachesize INT, @total_plans DECIMAL(8, 2), @one_use_pct DECIMAL(5, 2)
 
 SELECT
-	@cachesize = SUM([Total MBs – USE Count 1]),
-	@total_plans = SUM([total plans – use count 1])
+	@cachesize = SUM(Total_MBs_use_count_1),
+	@total_plans = SUM(total_plans_use_count_1)
 FROM #cache
 WHERE CacheType IN ('Prepared', 'Adhoc')
 
 
 SELECT
-	@one_use_pct = (@total_plans / SUM([total plans])) * 100.00
+	@one_use_pct = (@total_plans / SUM(total_plans)) * 100.00
 FROM #cache c
 
 IF @debug = 1
@@ -56,7 +56,7 @@ BEGIN
 	SELECT
 		*
 	FROM #cache AS c
-	ORDER BY c.[total mbs] DESC
+	ORDER BY c.total_mbs DESC
 END
 
 

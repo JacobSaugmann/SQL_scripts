@@ -1,4 +1,4 @@
-DROP TABLEIF EXISTS #pmuser
+DROP TABLE IF EXISTS #pmuser
 
 CREATE TABLE #pmuser (
   sqltext VARCHAR(MAX)
@@ -47,4 +47,4 @@ END
 
 SELECT *
 FROM #pmuser
-WHERE sqltext LIKE '%VENDTRANS%'
+--WHERE sqltext LIKE '%VENDTRANS%'

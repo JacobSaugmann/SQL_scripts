@@ -1,0 +1,55 @@
+/*
+	Query backup imformation listed by day and type and time past since last backup
+*/
+
+
+DECLARE @database_name SYSNAME = 'AXDB'
+
+DROP TABLE IF EXISTS #Backupsets
+
+SELECT DISTINCT
+	bs.database_name,
+	bs.backup_finish_date,
+	CASE bs.TYPE
+		WHEN 'D' THEN 'Database'
+		WHEN 'L' THEN 'Log'
+		WHEN 'I' THEN 'Differential database'
+		WHEN 'F' THEN 'File or filegroup'
+		WHEN 'G' THEN 'Differential file'
+		WHEN 'P' THEN 'Partial'
+		WHEN 'Q' THEN 'Differential partial'
+	END AS backup_type,
+	ROUND(CAST(bs.backup_size AS FLOAT(25)) / 1024 / 1024 / 1024, 2) BackupSizeGB,
+	ROUND(CAST(bs.compressed_backup_size AS FLOAT(25)) / 1024 / 1024 / 1024, 2) CompressedBackupSizeGB --if not available comment this line
+INTO #Backupsets
+FROM msdb.dbo.backupset bs
+LEFT JOIN sys.databases db
+	ON bs.database_name = db.NAME
+LEFT JOIN msdb.dbo.backupmediafamily bmf
+	ON bmf.media_set_id = bs.media_set_id
+WHERE (CONVERT(DATETIME, bs.backup_start_date, 102) >= GETDATE() - 14)
+	AND bs.database_name = @database_name
+ORDER BY
+bs.backup_finish_date DESC
+
+;
+WITH AGGREGATED_STATS
+	AS (SELECT
+				database_name,
+				backup_type,
+				backup_finish_date,
+				DATEDIFF(MINUTE, LEAD(backup_finish_date) OVER (PARTITION BY backup_type ORDER BY backup_finish_date DESC), backup_finish_date) AS minutes_since_last_backup
+			FROM #Backupsets)
+SELECT
+	database_name,
+	backup_type,
+	CASE
+		WHEN minutes_since_last_backup < 60 THEN CAST(minutes_since_last_backup AS VARCHAR(2)) + ' Minut'
+		WHEN minutes_since_last_backup >= 60 THEN CAST(CAST(minutes_since_last_backup / 60.0 AS DECIMAL(8, 2)) AS VARCHAR(10)) + ' Hour'
+	END AS time_since_last_Backup,
+	FORMAT(backup_finish_date, 'ddd') AS dayofweek,
+	backup_finish_date
+FROM AGGREGATED_STATS AS a
+ORDER BY backup_finish_date DESC
+
+DROP TABLE IF EXISTS #Backupsets

@@ -44,7 +44,7 @@ SELECT
 	database_name,
 	backup_type,
 	CASE
-		WHEN minutes_since_last_backup < 60 THEN CAST(minutes_since_last_backup AS VARCHAR(2)) + ' Minut'
+		WHEN minutes_since_last_backup < 60 THEN CAST(minutes_since_last_backup AS VARCHAR(2)) + ' Minute'
 		WHEN minutes_since_last_backup >= 60 THEN CAST(CAST(minutes_since_last_backup / 60.0 AS DECIMAL(8, 2)) AS VARCHAR(10)) + ' Hour'
 	END AS time_since_last_Backup,
 	FORMAT(backup_finish_date, 'ddd') AS dayofweek,

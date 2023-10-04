@@ -3,6 +3,7 @@ SELECT
 	db.recovery_model_desc,
 	bs.backup_start_date,
 	bs.backup_finish_date,
+	DATEDIFF(SECOND, bs.backup_start_date,bs.backup_finish_date) AS duration_sec,
 	CASE bs.TYPE
 		 WHEN 'D'
 			 THEN 'Database'
@@ -36,7 +37,7 @@ FROM msdb.dbo.backupset bs
 		 ON bmf.media_set_id = bs.media_set_id
 WHERE (CONVERT(DATETIME, bs.backup_start_date, 102) >= GETDATE() - 7)
 --and bs.type = 'D'
---and bs.database_name = 'TransVault'
+--and bs.database_name = 'AXDB'
 --and bmf.device_type = 2 --7
 ORDER BY
 --bs.database_name,

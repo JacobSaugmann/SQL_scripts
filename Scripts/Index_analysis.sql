@@ -414,16 +414,6 @@ BEGIN
 	SELECT 'At least '+ CAST(COALESCE(SUM(u.mb_pages),0) AS VARCHAR(50)) + ' MB of waisted space' AS comment
     FROM #useless_space_consumption u
 
-
-	SELECT OBJECT_NAME(object_id) AS object_name,
-    	   object_id,
-    	   index_id,
-    	   record_count,
-    	   page_count,
-    	   mb_pages
-    FROM #useless_space_consumption
-    ORDER BY object_name
-
 END
 GOTO CLEANUP
 

@@ -9,7 +9,7 @@ DECLARE @min_advantage TINYINT = 80
 DECLARE @getselectability BIT = 0
 DECLARE @drop_tmp_table BIT = 0
 DECLARE @meta_age INT = -1
-DECLARE @only_index_analysis BIT = 0
+DECLARE @only_index_analysis BIT = 1
 DECLARE @limit_to_tablename NVARCHAR(512) = NULL --N'Accounts'
 
 

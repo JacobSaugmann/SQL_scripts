@@ -221,7 +221,8 @@ BEGIN
 END
 
 /* Create Drop index statement */
-SELECT  CONCAT('DROP INDEX ', QUOTENAME(e.name), ' ON ', e.table_name) AS drop_statement,
+SELECT   e.table_name,
+	CONCAT('DROP INDEX ', QUOTENAME(e.name), ' ON ', e.table_name) AS drop_statement,
         CONCAT('ALTER INDEX ', QUOTENAME(e.name) ,' ON ',e.table_name, ' DISABLE;') AS disable_statement,
         e.user_lookups,
 	e.user_scans,

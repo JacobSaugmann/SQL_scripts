@@ -10,8 +10,8 @@ DECLARE @getselectability BIT = 0
 DECLARE @drop_tmp_table BIT = 0
 DECLARE @meta_age INT = -1
 DECLARE @only_index_analysis BIT = 1
-DECLARE @limit_to_tablename NVARCHAR(512) = NULL --N'Accounts'
-
+DECLARE @limit_to_tablename VARCHAR(512) = ''
+DECLARE @limit_to_indexname VARCHAR(512) = ''
 
 IF OBJECT_ID('tempdb..#MissingIndexes','U') IS NOT NULL
 	DROP TABLE #MissingIndexes
@@ -58,6 +58,7 @@ WHERE md.database_id = @db_id
 	AND (
 		mgs.avg_user_impact > @min_advantage
 		OR mgs.avg_total_user_cost > 50)
+		AND md.statement LIKE '%'+@limit_to_tablename+'%'
 ORDER BY md.object_id , mgs.avg_user_impact DESC
 
 
@@ -100,6 +101,7 @@ FROM sys.indexes i
             WHERE i.[object_id] = INXCLS.[object_id]
             	AND i.[index_id] = INXCLS.[index_id]
             	AND INXCLS.[is_included_column] = 0
+				AND i.name  LIKE '%'+@limit_to_indexname+'%'
             FOR XML PATH('')
         	), 1, 1, '')
 		) DS1([index_columns_names])                                                              
@@ -113,6 +115,7 @@ FROM sys.indexes i
             WHERE i.[object_id] = INXCLS.[object_id]
             	AND i.[index_id] = INXCLS.[index_id]
             	AND INXCLS.[is_included_column] = 1
+				AND i.name  LIKE '%'+@limit_to_indexname+'%'
             FOR XML PATH('')
         	), 1, 1, '')
 		) DS2([included_columns_names])                                                           
@@ -120,6 +123,7 @@ WHERE i.type IN (1,2,5)
 	AND ids.database_id = @db_id
 	AND alloc_unit_type_desc = 'IN_ROW_DATA'
 	AND i.is_disabled = 0
+	AND t.name LIKE '%'+@limit_to_tablename+'%'
 
 --Missing index on tables with existing index
 
@@ -168,9 +172,6 @@ AS
 )
 SELECT *
 FROM index_info
-WHERE (
-		@limit_to_tablename IS NULL
-		OR table_name LIKE '%'+@limit_to_tablename+'%')
 ORDER BY table_name , table_type_desc COLLATE DATABASE_DEFAULT
 
 IF @only_index_analysis = 1
@@ -194,9 +195,7 @@ AS
     			ON es.index_columns_names = e.index_columns_names
     				AND es.table_name = e.table_name
     				AND es.name <> e.name
-    WHERE (
-    		@limit_to_tablename IS NULL
-    		OR e.table_name LIKE '%'+@limit_to_tablename+'%')
+   
 )
 SELECT DISTINCT CASE WHEN oi.row_no > 1
 		AND index_state = 'Overlapping'        THEN '[WARNING] overlapping index'
@@ -209,6 +208,8 @@ SELECT DISTINCT CASE WHEN oi.row_no > 1
 	            oi.included_columns_names,
 	            CASE WHEN oi.row_no > 1 THEN CONCAT('ALTER INDEX ', QUOTENAME(oi.index_name) ,' ON ',oi.table_name, ' DISABLE;') END AS disable_stmt
 FROM OVERLAPPING_INDEXES oi
+WHERE oi.table_name LIKE '%'+@limit_to_tablename+'%'
+	OR oi.index_name LIKE '%'+@limit_to_indexname+'%'
 ORDER BY oi.table_name , oi.index_name
 
 
@@ -277,8 +278,7 @@ BEGIN
         			ON [Tables].[object_id] = [Partitions].[object_id]
         				AND [Partitions].index_id IN (0, 1)
         				AND (
-        					@limit_to_tablename IS NULL
-        					OR [Tables].name LIKE '%'+@limit_to_tablename+'%')
+        					 [Tables].name LIKE '%'+@limit_to_tablename+'%')
         -- WHERE [Tables].name = N'name of the table'
         GROUP BY SCHEMA_NAME(schema_id) , [Tables].name
 	)

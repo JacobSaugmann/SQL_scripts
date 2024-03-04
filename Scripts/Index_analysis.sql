@@ -46,8 +46,8 @@ SELECT md.statement AS table_name,
 	   mgs.last_user_scan,
 	   mgs.last_user_seek,
 	   @meta_age meta_data_age,
-	   CONCAT('CREATE NONCLUSTERED INDEX IDX_',REPLACE(REPLACE(REPLACE(SUBSTRING(md.statement, CHARINDEX('.', md.statement)+1, LEN(md.statement)- LEN(CHARINDEX('.', md.statement))), '[',''), ']',''),'.','_'),'_',REPLACE(REPLACE(REPLACE(REPLACE(IIF(md.equality_columns IS NOT NULL, md.equality_columns, md.inequality_columns), '.','_'),'[',''),']',''),', ',''),' ON ',md.statement, ' (',IIF(md.equality_columns IS NOT NULL, md.equality_columns, md.inequality_columns) ,')', IIF(md.included_columns IS NOT NULL,' INCLUDE(' +md.included_columns+ ')', ''), ' WITH (DATA_COMPRESSION=PAGE);'   ) AS create_ix_stmt
-	INTO #MissingIndexes
+	   CONCAT('CREATE NONCLUSTERED INDEX idx_',REPLACE(REPLACE(REPLACE(SUBSTRING(md.statement, CHARINDEX('.', md.statement, CHARINDEX('.', md.statement)+1)+1, LEN(md.statement)- LEN(CHARINDEX('.', md.statement,CHARINDEX('.', md.statement)+1))), '[',''), ']',''),'.','_'),'_',FORMAT(GETDATE(), 'yyyyMMdd'),' ON ',md.statement, ' (',IIF(md.equality_columns IS NOT NULL, md.equality_columns, md.inequality_columns) ,')', IIF(md.included_columns IS NOT NULL,' INCLUDE(' +md.included_columns+ ')', ''), ' WITH (DATA_COMPRESSION=PAGE);'   ) AS create_ix_stmt
+INTO #MissingIndexes
 FROM sys.dm_db_missing_index_details md               
 	INNER JOIN sys.dm_db_missing_index_groups mg      
 			ON mg.index_handle = md.index_handle

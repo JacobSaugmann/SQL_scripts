@@ -1,0 +1,62 @@
+SET TRANSACTION ISOLATION LEVEl READ UNCOMMITTED
+
+DECLARE @index_name_pattern VARCHAR(512) = 'idx_%'
+
+DECLARE @MetaAge INT = 0
+SELECT @MetaAge = DATEDIFF(DAY, create_date, GETDATE())
+FROM sys.databases 
+WHERE name = 'tempdb'
+
+
+SELECT CONCAT(QUOTENAME(s.name),'.',QUOTENAME(t.name)) [database.table_name],
+	   @MetaAge AS [database.metadata_age],
+	   SYSDATETIME() AS [database.timegenerated],
+	   i.name as [index.name],	  
+	   ids.record_count AS [index.records],	 
+	   ius.user_lookups AS [index.lookups],
+	   ius.user_scans AS [index.scans],
+	   ius.user_seeks AS [index.seeks],
+	   ius.user_updates AS [index.updates],
+       @@SERVERNAME AS [instance.name]
+FROM sys.indexes i                                                                                
+	CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id,NULL,'SAMPLED') ids
+	INNER JOIN sys.dm_db_index_usage_stats ius                                                    
+			ON ius.index_id = ids.index_id
+				AND ius.object_id = ids.object_id
+				AND ius.database_id = ids.database_id
+	INNER JOIN sys.tables t                                                                       
+			ON t.object_id = ids.object_id
+	INNER JOIN sys.schemas s                                                                      
+			ON s.schema_id = t.schema_id
+	CROSS APPLY (
+		SELECT STUFF((
+        	SELECT ' [' + CLS.[name] + '];'
+            FROM [sys].[index_columns] INXCLS 
+            	INNER JOIN [sys].[columns] CLS
+            			ON INXCLS.[object_id] = CLS.[object_id]
+            				AND INXCLS.[column_id] = CLS.[column_id]
+            WHERE i.[object_id] = INXCLS.[object_id]
+            	AND i.[index_id] = INXCLS.[index_id]
+            	AND INXCLS.[is_included_column] = 0
+            FOR XML PATH('')
+        	), 1, 1, '')
+		) DS1([index_columns_names])                                                              
+	CROSS APPLY (
+		SELECT STUFF((
+        	SELECT ' [' + CLS.[name] + '];'
+            FROM [sys].[index_columns] INXCLS 
+            	INNER JOIN [sys].[columns] CLS
+            			ON INXCLS.[object_id] = CLS.[object_id]
+            				AND INXCLS.[column_id] = CLS.[column_id]
+            WHERE i.[object_id] = INXCLS.[object_id]
+            	AND i.[index_id] = INXCLS.[index_id]
+            	AND INXCLS.[is_included_column] = 1
+            FOR XML PATH('')
+        	), 1, 1, '')
+		) DS2([included_columns_names])                                                           
+WHERE i.type IN (1,2,5)
+	AND ids.database_id = DB_ID()
+	AND alloc_unit_type_desc = 'IN_ROW_DATA'
+	AND i.is_disabled = 0
+    AND i.name LIKE @index_name_pattern
+    AND s.name = 'dbo'

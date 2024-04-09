@@ -11,15 +11,18 @@ WHERE name = 'tempdb'
 SELECT CONCAT(QUOTENAME(s.name),'.',QUOTENAME(t.name)) [database.table_name],
 	   @MetaAge AS [database.metadata_age],
 	   SYSDATETIME() AS [database.timegenerated],
-	   i.name as [index.name],	  
-	   ids.record_count AS [index.records],	 
-	   ius.user_lookups AS [index.lookups],
-	   ius.user_scans AS [index.scans],
-	   ius.user_seeks AS [index.seeks],
-	   ius.user_updates AS [index.updates],
+	   i.name AS [index.name],	  
+	   i.type_desc AS [index.type],
+	   SUM(COALESCE(p.rows,ids.record_count)) AS [index.records],	 
+	   SUM(ius.user_lookups) AS [index.lookups],
+	   SUM(ius.user_scans) AS [index.scans],
+	   SUM(ius.user_seeks) AS [index.seeks],
+	   SUM(ius.user_updates) AS [index.updates],
        @@SERVERNAME AS [instance.name]
 FROM sys.indexes i                                                                                
 	CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id,NULL,'SAMPLED') ids
+	LEFT JOIN  sys.partitions as p ON i.object_id = p.object_id
+		AND p.index_id = i.index_id
 	LEFT JOIN sys.dm_db_index_usage_stats ius                                                    
 			ON ius.index_id = ids.index_id
 				AND ius.object_id = ids.object_id
@@ -54,10 +57,11 @@ FROM sys.indexes i
             FOR XML PATH('')
         	), 1, 1, '')
 		) DS2([included_columns_names])                                                           
-WHERE i.type IN (1,2,5)
+WHERE i.type IN (1,2,5,6)
 	AND ids.database_id = DB_ID()
 	AND alloc_unit_type_desc = 'IN_ROW_DATA'
 	AND i.is_disabled = 0
     AND i.name LIKE @index_name_pattern
     AND s.name = 'dbo'
+GROUP BY t.name,i.name, i.type_desc, s.name
 ORDER BY t.name, i.name

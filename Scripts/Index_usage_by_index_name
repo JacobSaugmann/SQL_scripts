@@ -1,67 +1,78 @@
-SET TRANSACTION ISOLATION LEVEl READ UNCOMMITTED
-
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
 DECLARE @index_name_pattern VARCHAR(512) = 'idx_%'
-
 DECLARE @MetaAge INT = 0
 SELECT @MetaAge = DATEDIFF(DAY, create_date, GETDATE())
 FROM sys.databases 
 WHERE name = 'tempdb'
 
-
 SELECT CONCAT(QUOTENAME(s.name),'.',QUOTENAME(t.name)) [database.table_name],
-	   @MetaAge AS [database.metadata_age],
-	   SYSDATETIME() AS [database.timegenerated],
-	   i.name AS [index.name],	  
-	   i.type_desc AS [index.type],
-	   SUM(COALESCE(p.rows,ids.record_count)) AS [index.records],	 
-	   SUM(ius.user_lookups) AS [index.lookups],
-	   SUM(ius.user_scans) AS [index.scans],
-	   SUM(ius.user_seeks) AS [index.seeks],
-	   SUM(ius.user_updates) AS [index.updates],
+       @MetaAge AS [database.metadata_age],
+       SYSDATETIME() AS [database.timegenerated],
+       i.name AS [index.name],
+       i.type_desc AS [index.type],
+       SUM(COALESCE(p.rows,ids.record_count)) AS [index.records],
+       SUM(ius.user_lookups) AS [index.lookups],
+       SUM(ius.user_scans) AS [index.scans],
+       SUM(ius.user_seeks) AS [index.seeks],
+       SUM(ius.user_updates) AS [index.updates],
+       CAST(
+           (SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups))
+           AS DECIMAL(18,2)
+       ) / NULLIF(SUM(ius.user_updates), 0) AS [index.read_write_ratio],
+       CAST(
+           SUM(ius.user_seeks) AS DECIMAL(18,2)
+       ) / NULLIF(
+           SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups), 0
+       ) AS [index.seek_ratio],
+       CAST(
+           (SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups)) * 1000000.0
+           AS DECIMAL(18,2)
+       ) / NULLIF(SUM(COALESCE(p.rows, ids.record_count)), 0) AS [index.reads_per_million_rows],
        @@SERVERNAME AS [instance.name]
-FROM sys.indexes i                                                                                
-	CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id,NULL,'SAMPLED') ids
-	LEFT JOIN  sys.partitions as p ON i.object_id = p.object_id
-		AND p.index_id = i.index_id
-	LEFT JOIN sys.dm_db_index_usage_stats ius                                                    
-			ON ius.index_id = ids.index_id
-				AND ius.object_id = ids.object_id
-				AND ius.database_id = ids.database_id
-	INNER JOIN sys.tables t                                                                       
-			ON t.object_id = ids.object_id
-	INNER JOIN sys.schemas s                                                                      
-			ON s.schema_id = t.schema_id
-	CROSS APPLY (
-		SELECT STUFF((
-        	SELECT ' [' + CLS.[name] + '];'
-            FROM [sys].[index_columns] INXCLS 
-            	INNER JOIN [sys].[columns] CLS
-            			ON INXCLS.[object_id] = CLS.[object_id]
-            				AND INXCLS.[column_id] = CLS.[column_id]
-            WHERE i.[object_id] = INXCLS.[object_id]
-            	AND i.[index_id] = INXCLS.[index_id]
-            	AND INXCLS.[is_included_column] = 0
+FROM sys.indexes i
+    CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id, NULL, 'SAMPLED') ids
+    LEFT JOIN sys.partitions AS p
+            ON i.object_id = p.object_id
+                AND p.index_id = i.index_id
+    LEFT JOIN sys.dm_db_index_usage_stats ius
+            ON ius.index_id = ids.index_id
+                AND ius.object_id = ids.object_id
+                AND ius.database_id = ids.database_id
+    INNER JOIN sys.tables t
+            ON t.object_id = ids.object_id
+    INNER JOIN sys.schemas s
+            ON s.schema_id = t.schema_id
+    CROSS APPLY (
+        SELECT STUFF((
+            SELECT ' [' + CLS.[name] + '];'
+            FROM sys.index_columns INXCLS
+                INNER JOIN sys.columns CLS
+                        ON INXCLS.object_id = CLS.object_id
+                            AND INXCLS.column_id = CLS.column_id
+            WHERE i.object_id = INXCLS.object_id
+                AND i.index_id = INXCLS.index_id
+                AND INXCLS.is_included_column = 0
             FOR XML PATH('')
-        	), 1, 1, '')
-		) DS1([index_columns_names])                                                              
-	CROSS APPLY (
-		SELECT STUFF((
-        	SELECT ' [' + CLS.[name] + '];'
-            FROM [sys].[index_columns] INXCLS 
-            	INNER JOIN [sys].[columns] CLS
-            			ON INXCLS.[object_id] = CLS.[object_id]
-            				AND INXCLS.[column_id] = CLS.[column_id]
-            WHERE i.[object_id] = INXCLS.[object_id]
-            	AND i.[index_id] = INXCLS.[index_id]
-            	AND INXCLS.[is_included_column] = 1
+            ), 1, 1, '')
+        ) DS1([index_columns_names])
+    CROSS APPLY (
+        SELECT STUFF((
+            SELECT ' [' + CLS.[name] + '];'
+            FROM sys.index_columns INXCLS
+                INNER JOIN sys.columns CLS
+                        ON INXCLS.object_id = CLS.object_id
+                            AND INXCLS.column_id = CLS.column_id
+            WHERE i.object_id = INXCLS.object_id
+                AND i.index_id = INXCLS.index_id
+                AND INXCLS.is_included_column = 1
             FOR XML PATH('')
-        	), 1, 1, '')
-		) DS2([included_columns_names])                                                           
+            ), 1, 1, '')
+        ) DS2([included_columns_names])
 WHERE i.type IN (1,2,5,6)
-	AND ids.database_id = DB_ID()
-	AND alloc_unit_type_desc = 'IN_ROW_DATA'
-	AND i.is_disabled = 0
+    AND ids.database_id = DB_ID()
+    AND alloc_unit_type_desc = 'IN_ROW_DATA'
+    AND i.is_disabled = 0
     AND i.name LIKE @index_name_pattern
     AND s.name = 'dbo'
-GROUP BY t.name,i.name, i.type_desc, s.name
+GROUP BY t.name, i.name, i.type_desc, s.name
 ORDER BY t.name, i.name

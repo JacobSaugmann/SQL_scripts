@@ -1,34 +1,140 @@
+SET NOCOUNT ON
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+
+/*
+==========================================================================
+INDEX USAGE ANALYSIS
+==========================================================================
+Analyserer brug af user-defined indexes (default pattern 'idx_%') og 
+giver tre ratio-metrics samt kategorisering til Messages-fanen.
+
+Kompatibilitet: SQL Server 2012 (v11) til 2025 (v17).
+
+GRUNDLÆGGENDE METRICS
+---------------------
+records             : Antal rækker i tabellen (fra sys.partitions)
+lookups, scans,     : DMV-tal siden sidste server-restart eller stats-reset.
+seeks, updates        Se database.metadata_age for kontekst.
+
+RATIO-METRICS
+-------------
+1) read_write_ratio = (seeks + scans + lookups) / updates
+   Er indexet værd at vedligeholde? Sammenligner brug mod skrivning.
+
+   >10   : Stærk værdi - reads dominerer kraftigt
+   1-10  : Værdifuldt - flere reads end writes
+   <1    : Drop-kandidat - flere writes end reads
+   NULL  : updates=0 - rent læst index (best case)
+
+2) seek_ratio = seeks / (seeks + scans + lookups)
+   Hvor effektivt bruges indexet når det først bruges?
+
+   >0.9    : Optimizer bruger indexet via seeks - designet rigtigt
+   0.5-0.9 : Blandet - ofte ok, men tjek om range scans er forventet
+   <0.5    : Mest scans/lookups - leading key matcher sjældent prædikater
+   NULL    : Aldrig brugt
+
+   Forbehold: range scans på korrekt leading key tæller som scans men er 
+   effektive. user_scans skelner ikke fuld vs partial scan.
+
+3) reads_per_million_rows = total_reads * 1.000.000 / records
+   Relativt forbrug - gør store og små tabeller sammenlignelige.
+
+   >100  : Hot index - meget brugt relativt til tabel-størrelse
+   1-100 : Moderat brug
+   <1    : Sjælden brug
+
+   Forbehold: tabeller under ~10K rows giver kunstigt høje tal. 
+   user_seeks/scans/lookups tæller KALD, ikke rækker læst.
+
+KATEGORISERING (Messages tab)
+-----------------------------
+High impact     : total_reads >= 100.000 AND read_write_ratio >= 10 (eller NULL)
+                  Kritiske indexes - behold/optimer
+Good impact     : total_reads >= 1.000  AND read_write_ratio >= 1
+                  Solidt brugte indexes - beholdes
+Low impact      : Reads dominerer writes, men lavt total brug
+                  Kan typisk beholdes hvis indexet er smalt
+Drop candidates : read_write_ratio < 1 ELLER total_reads = 0
+                  Indexet koster mere end det giver - overvej disable/drop
+
+VIGTIGT: Tjek database.metadata_age før beslutning. DMV-tal under 14 dage 
+er upålidelige, fordi de nulstilles ved server-restart.
+==========================================================================
+*/
+
+-- =====================================================================
+-- Version-check: kræver SQL Server 2012 (v11) eller nyere
+-- =====================================================================
+DECLARE @ProductVersion NVARCHAR(128) = CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128))
+DECLARE @ProductMajorVersion INT = 
+    CAST(LEFT(@ProductVersion, CHARINDEX('.', @ProductVersion) - 1) AS INT)
+
+IF @ProductMajorVersion < 11
+BEGIN
+    DECLARE @err NVARCHAR(200) = 
+        N'Scriptet kræver SQL Server 2012 (version 11) eller nyere. Fundet version: ' 
+        + @ProductVersion
+    RAISERROR(@err, 16, 1)
+    RETURN
+END
+
+-- =====================================================================
+-- Konfiguration
+-- =====================================================================
 DECLARE @index_name_pattern VARCHAR(512) = 'idx_%'
 DECLARE @MetaAge INT = 0
 SELECT @MetaAge = DATEDIFF(DAY, create_date, GETDATE())
 FROM sys.databases 
 WHERE name = 'tempdb'
 
-SELECT CONCAT(QUOTENAME(s.name),'.',QUOTENAME(t.name)) [database.table_name],
-       @MetaAge AS [database.metadata_age],
-       SYSDATETIME() AS [database.timegenerated],
-       i.name AS [index.name],
-       i.type_desc AS [index.type],
-       SUM(COALESCE(p.rows,ids.record_count)) AS [index.records],
-       SUM(ius.user_lookups) AS [index.lookups],
-       SUM(ius.user_scans) AS [index.scans],
-       SUM(ius.user_seeks) AS [index.seeks],
-       SUM(ius.user_updates) AS [index.updates],
+-- =====================================================================
+-- Saml resultat i temp-tabel: én dyr query, to outputs (grid + Messages)
+-- =====================================================================
+IF OBJECT_ID('tempdb..#IndexAnalysis') IS NOT NULL DROP TABLE #IndexAnalysis
+
+CREATE TABLE #IndexAnalysis (
+    [database.table_name]          NVARCHAR(520),
+    [database.metadata_age]        INT,
+    [database.timegenerated]       DATETIME2,
+    [index.name]                   SYSNAME,
+    [index.type]                   NVARCHAR(60),
+    [index.records]                BIGINT,
+    [index.lookups]                BIGINT,
+    [index.scans]                  BIGINT,
+    [index.seeks]                  BIGINT,
+    [index.updates]                BIGINT,
+    [index.read_write_ratio]       DECIMAL(18,2),
+    [index.seek_ratio]             DECIMAL(18,2),
+    [index.reads_per_million_rows] DECIMAL(18,2),
+    [instance.name]                NVARCHAR(256)
+)
+
+INSERT INTO #IndexAnalysis
+SELECT CONCAT(QUOTENAME(s.name),'.',QUOTENAME(t.name)),
+       @MetaAge,
+       SYSDATETIME(),
+       i.name,
+       i.type_desc,
+       SUM(COALESCE(p.rows, ids.record_count)),
+       SUM(ius.user_lookups),
+       SUM(ius.user_scans),
+       SUM(ius.user_seeks),
+       SUM(ius.user_updates),
        CAST(
            (SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups))
            AS DECIMAL(18,2)
-       ) / NULLIF(SUM(ius.user_updates), 0) AS [index.read_write_ratio],
+       ) / NULLIF(SUM(ius.user_updates), 0),
        CAST(
            SUM(ius.user_seeks) AS DECIMAL(18,2)
        ) / NULLIF(
            SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups), 0
-       ) AS [index.seek_ratio],
+       ),
        CAST(
            (SUM(ius.user_seeks) + SUM(ius.user_scans) + SUM(ius.user_lookups)) * 1000000.0
            AS DECIMAL(18,2)
-       ) / NULLIF(SUM(COALESCE(p.rows, ids.record_count)), 0) AS [index.reads_per_million_rows],
-       @@SERVERNAME AS [instance.name]
+       ) / NULLIF(SUM(COALESCE(p.rows, ids.record_count)), 0),
+       @@SERVERNAME
 FROM sys.indexes i
     CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id, NULL, 'SAMPLED') ids
     LEFT JOIN sys.partitions AS p
@@ -75,4 +181,129 @@ WHERE i.type IN (1,2,5,6)
     AND i.name LIKE @index_name_pattern
     AND s.name = 'dbo'
 GROUP BY t.name, i.name, i.type_desc, s.name
-ORDER BY t.name, i.name
+
+-- =====================================================================
+-- Result set til grid
+-- =====================================================================
+SELECT * 
+FROM #IndexAnalysis
+ORDER BY [database.table_name], [index.name]
+
+-- =====================================================================
+-- Kategorisering og output til Messages-fanen
+-- =====================================================================
+DECLARE @categorized TABLE (
+    category   VARCHAR(20),
+    sort_order INT,
+    line       NVARCHAR(500)
+)
+
+INSERT INTO @categorized
+SELECT 
+    CASE 
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) = 0 
+             THEN 'Drop candidates'
+        WHEN [index.read_write_ratio] IS NOT NULL 
+             AND [index.read_write_ratio] < 1 
+             THEN 'Drop candidates'
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) >= 100000 
+             AND ([index.read_write_ratio] IS NULL OR [index.read_write_ratio] >= 10) 
+             THEN 'High impact'
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) >= 1000 
+             AND ([index.read_write_ratio] IS NULL OR [index.read_write_ratio] >= 1) 
+             THEN 'Good impact'
+        ELSE 'Low impact'
+    END,
+    CASE 
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) = 0 THEN 4
+        WHEN [index.read_write_ratio] IS NOT NULL 
+             AND [index.read_write_ratio] < 1 THEN 4
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) >= 100000 
+             AND ([index.read_write_ratio] IS NULL OR [index.read_write_ratio] >= 10) THEN 1
+        WHEN ([index.seeks] + [index.scans] + [index.lookups]) >= 1000 
+             AND ([index.read_write_ratio] IS NULL OR [index.read_write_ratio] >= 1) THEN 2
+        ELSE 3
+    END,
+    CONCAT(
+        [database.table_name], '.', [index.name],
+        '  reads=', 
+        CONVERT(VARCHAR(20), [index.seeks] + [index.scans] + [index.lookups]),
+        '  updates=', CONVERT(VARCHAR(20), [index.updates]),
+        '  r/w=', COALESCE(CAST([index.read_write_ratio] AS VARCHAR(20)), 'inf'),
+        '  seek_ratio=', COALESCE(CAST([index.seek_ratio] AS VARCHAR(20)), 'n/a'),
+        '  per_million=', COALESCE(CAST([index.reads_per_million_rows] AS VARCHAR(20)), 'n/a')
+    )
+FROM #IndexAnalysis
+
+-- Header
+DECLARE @total_count INT
+SELECT @total_count = COUNT(*) FROM #IndexAnalysis
+
+PRINT '================================================================'
+PRINT 'INDEX USAGE ANALYSIS - Kategorisering'
+PRINT 'SQL Server version: ' + @ProductVersion + ' (major ' + CAST(@ProductMajorVersion AS VARCHAR(5)) + ')'
+PRINT 'Server: ' + @@SERVERNAME + '  DB: ' + DB_NAME() + '  Pattern: ' + @index_name_pattern
+PRINT 'Metadata age: ' + CAST(@MetaAge AS VARCHAR(10)) + ' dage'
+       + CASE WHEN @MetaAge < 14 
+              THEN '  (ADVARSEL: under 14 dage - DMV-tal er upålidelige)' 
+              ELSE '' 
+         END
+PRINT 'Total indexes analyseret: ' + CAST(@total_count AS VARCHAR(10))
+PRINT '================================================================'
+PRINT ''
+
+-- Yderste loop: gennemløb hver kategori
+DECLARE @categories TABLE (cat VARCHAR(20), ord INT, header NVARCHAR(150))
+INSERT INTO @categories VALUES 
+    ('High impact',     1, '--- HIGH IMPACT (kritiske - behold/optimer) ---'),
+    ('Good impact',     2, '--- GOOD IMPACT (solidt brugte - behold) ---'),
+    ('Low impact',      3, '--- LOW IMPACT (lavt brug, reads > writes) ---'),
+    ('Drop candidates', 4, '--- DROP CANDIDATES (writes > reads eller ubrugte) ---')
+
+DECLARE @cur_cat VARCHAR(20), @cur_header NVARCHAR(150), @line_count INT
+DECLARE @current_line NVARCHAR(500)
+
+DECLARE cat_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT cat, header FROM @categories ORDER BY ord
+
+OPEN cat_cursor
+FETCH NEXT FROM cat_cursor INTO @cur_cat, @cur_header
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SELECT @line_count = COUNT(*) FROM @categorized WHERE category = @cur_cat
+    
+    PRINT @cur_header
+    PRINT 'Antal: ' + CAST(@line_count AS VARCHAR(10))
+    
+    IF @line_count = 0
+        PRINT '  (ingen)'
+    ELSE
+    BEGIN
+        -- Indre loop: én PRINT pr. linje (kompatibelt fra 2012+ uden STRING_AGG)
+        DECLARE line_cursor CURSOR LOCAL FAST_FORWARD FOR
+            SELECT line FROM @categorized 
+            WHERE category = @cur_cat
+            ORDER BY line
+        
+        OPEN line_cursor
+        FETCH NEXT FROM line_cursor INTO @current_line
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            PRINT '  ' + @current_line
+            FETCH NEXT FROM line_cursor INTO @current_line
+        END
+        
+        CLOSE line_cursor
+        DEALLOCATE line_cursor
+    END
+    PRINT ''
+    
+    FETCH NEXT FROM cat_cursor INTO @cur_cat, @cur_header
+END
+
+CLOSE cat_cursor
+DEALLOCATE cat_cursor
+
+PRINT '================================================================'
